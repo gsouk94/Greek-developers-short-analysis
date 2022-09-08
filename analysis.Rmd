@@ -1,0 +1,205 @@
+---
+title: 'Stack Overflow Developers Survey: Data for Greek Developers'
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+The two datasets that I use originate from the "Stack Overflow" website.
+These two datasets are the result of the yearly survey conducted by the
+company, regarding developers all around the world.
+(<https://insights.stackoverflow.com/survey/2021>). I used the dataset
+from 2021. More information regarding the datasets can be found online.
+
+Insert the library "tidyverse" and our datasets.
+
+```{r}
+library(tidyverse) 
+survey <- read.csv("survey_results_public.csv")
+schema <- read.csv("survey_results_schema.csv")
+```
+
+View the datasets, check dimensions and column names.
+
+```{r}
+dim(survey)
+view(survey)
+head(survey)
+colnames(survey)
+view(schema)
+```
+
+In this small case study, I want to take a look at data relevant to
+greek developers. I will filter out only the developers that live in
+Greece.
+
+```{r}
+greece <- survey%>%
+  filter(Country == "Greece")
+head(greece)
+```
+
+In contrast with other countries, the amount of respondents from Greece
+is smaller. We can check how many observations there are with the
+n_distinct() function.
+
+```{r}
+n_distinct(greece$ResponseId)
+```
+
+The new dataset has 603 responses. Let's check for duplicates before
+proceeding.
+
+```{r}
+isTRUE(duplicated(greece))
+```
+
+We see that we get one False value, meaning that we do not have
+duplicate entries. We can check for the same question without adding the
+"is.TRUE()" function. In that case, R will give back a number of Falses
+and/or Trues.The new data set that I created includes 603 developers
+that live in Greece. However, I want to extract answers about those that
+are professionals. I will filter out only those devs that code
+professionally and are employed full time.
+
+```{r}
+pros <- filter(greece, MainBranch =="I am a developer by profession" & Employment =="Employed full-time")
+head(pros)
+n_distinct(pros)
+view(pros)
+```
+
+The new data set is ready. For start, I want to check the median salary
+of developers living in Greece
+
+```{r}
+median(pros$ConvertedCompYearly)
+```
+
+It seems that we have some respondents that did not include their
+salary. We have to clean the data set and keep only those responses with
+actual information. In this case I will remove the NA values. However,
+another good practice that suits proper analysis would be the
+replacement of NAs with the MEAN or the MEDIAN of the rest of the
+observations. Also, let's remove some columns that are not needed.
+
+```{r}
+pros_omit <- pros%>%
+  drop_na(ConvertedCompYearly)
+pros_omit <- pros_omit%>%
+  select(-c(US_State, UK_Country))
+```
+
+Let's check the median salary of the developers living in Greece.
+
+```{r}
+median(pros_omit$ConvertedCompYearly)
+```
+
+The median salary of developers living in Greece is 25944 Euros. If we
+take a look at our data set, we will notice that there is a column which
+mentions the programming languages these devs have worked with. For the
+sake of this small case study, let's create a column with the number of
+languages each dev has worked with and know, and let's see if there is a
+correlation with their yearly salary.
+
+```{r}
+pros_omit$lang_work <- gsub(";", " ", pros_omit$LanguageHaveWorkedWith) ## create a new column and replace ";" character with a space " "
+
+langs <- pros_omit$lang_work ## create a new vector with the separated values
+langs2 <- unlist(sapply(langs, strsplit, split = "\\  ", USE.NAMES = FALSE)) ##unlist the vector langs2 
+pros_omit$langs_number <- (str_count(langs2, " ")) ##assign the number of strings as a number in our dataframe
+
+pros_omit$langs_number <- pros_omit$langs_number + 1 ## add 1 in the column for correcting the missing language
+                           
+view(pros_omit)
+```
+
+Let's see if there is a correlation between the number of languages used
+by devs and their yearly income
+
+```{r}
+ggplot(pros_omit, aes(x = langs_number, y = ConvertedCompYearly)) + 
+  geom_point()+
+  geom_smooth(method = lm)+
+  ggtitle("Corellation between number of languages known and annual income")+
+  labs(x = "Languages known", y = "Annual income")
+```
+
+This data set includes some extreme values, such as 1 million or 2
+million Euros. For reasons of simplicity let's narrow down these values
+by setting a filter to yearly income and re-plot our results.
+
+```{r}
+pros_inc <- subset(pros_omit, pros_omit$ConvertedCompYearly < 80000)
+view(pros_inc)
+
+```
+
+Create the scatter plot again
+
+```{r}
+ggplot(pros_inc, aes(x = langs_number, y = ConvertedCompYearly)) +
+  geom_point(col = "red", pch = 15)+
+  geom_smooth(method = lm)+
+  labs(x = "Languages worked with", y = "Yearly Income")
+  
+```
+
+By plotting the data, it is obvious that there is not a direct
+correlation between the number of languages known and previously used by
+developers and their annual income. Now, we will explore the potential
+correlation between income and years coding and age. First we have to
+clean those columns in order to explore our data. Then we will create a
+new plot
+
+```{r}
+pros_inc%>%
+  na.omit(pros_inc$YearsCodePro)
+isTRUE(is.na(pros_inc$YearsCodePro))
+pros_inc$YearsCodePro[pros_inc$YearsCodePro == "Less than 1 year"] <- 1 ## replace "Less than 1 year" string with 1
+view(pros_inc)
+pros_inc$YearsCodePro<- as.numeric(pros_inc$YearsCodePro)
+view(pros_inc)
+ggplot(pros_inc, aes(x = YearsCodePro, y = ConvertedCompYearly))+
+  geom_point(col = "red", pch = 15)+
+  geom_smooth(method = lm)+
+  ggtitle("Correlation between years of professional coding and annual income")+
+  labs(x = "Years of professional coding", y = "Annual income")
+
+```
+
+In this particular case, a small trend seems to exist between the two
+variables, as in some cases, more years of coding experience lead to a
+better yearly salary. However, this result definitely does not provide a
+secure answer and more sophisticated methods should be applied, which
+lie beyond this small case study.
+
+Now, let's create some visualizations in order to explore our data
+
+Density of developer's age groups based on their yearly income:
+
+```{r}
+ggplot(pros_inc, aes(x = ConvertedCompYearly, fill = Age))+
+  geom_density(alpha= .7)+
+  ggtitle("Density of programmers age groups based on their income")+
+  labs(x = "Annual income", y = "Density")
+```
+
+It is obvious that most developers between 18-24 years old earn less
+than 20k euros per year, with only a small number of them earning more
+than this amount. The graph gives some excellent result about Greek
+professional developers which need to be explored in more depth.
+
+In the same way, we can further explore our data and answer some simple
+(at the beginning) questions regarding the situation with Greek
+professional developers. For example, we can check with some simple
+plots the differences between gender, education or other similar issues.
+
+```{}
+```
